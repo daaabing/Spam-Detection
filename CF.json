@@ -1,0 +1,139 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Lambda Functions",
+    "Parameters": {
+      "sagemakerendpoints": {
+        "Type": "String",
+        "Default": "sms-spam-classifier-mxnet-2021-11-27-17-37-54-280"
+      }
+  
+    },
+    "Resources": {
+      "hw3CF": {
+        "Type": "AWS::Lambda::Function",
+        "Properties": {
+          "Code": {
+            "S3Bucket": "hw3-codebucket",
+            "S3Key": "hw3-lf1-c33bf094-4864-408b-b419-1f9127c51e06.zip"
+          },
+          "Description": "Lambda function for spam detection",
+          "Tags": [
+            {
+              "Value": "SAM",
+              "Key": "lambda:createdBy"
+            }
+          ],
+          "MemorySize": 128,
+          "Environment": {
+            "Variables": {
+              "REGION": "us-east-1",
+              "SAGEENDPOINT": {
+                "Ref": "sagemakerendpoints"
+              }
+            }
+          },
+          "Handler": "lambda_function.lambda_handler",
+          "Role": "",
+          "Timeout": 30,
+          "Runtime": "python3.8",
+          "FunctionName": "hw3CF"
+        }
+      },
+      "emailbuckethw2808": {
+        "DependsOn": "LambdaInvokePermission",
+        "Type": "AWS::S3::Bucket",
+        "Properties": {
+          "BucketName": "emailbuckethw2808",
+          "NotificationConfiguration": {
+            "LambdaConfigurations": [
+              {
+                "Event": "s3:ObjectCreated:Put",
+                "Function": {
+  
+                  "Fn::GetAtt": [
+                    "hw3CF",
+                    "Arn"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "LambdaInvokePermission": {
+        "Type": "AWS::Lambda::Permission",
+        "DependsOn": [ "hw3CF" ],
+        "Properties": {
+          "Action": "lambda:InvokeFunction",
+          "FunctionName": {
+            "Fn::GetAtt": [
+              "hw3CF",
+              "Arn"
+            ]
+          },
+          "Principal": "s3.amazonaws.com",
+          "SourceAccount": {
+            "Ref": "AWS::AccountId"
+          },
+          "SourceArn": {
+            "Fn::Sub": "arn:aws:s3:::emailbuckethw2808"
+          }
+        }
+      },
+      "emailbucketPolicy": {
+        "Type": "AWS::S3::BucketPolicy",
+        "Properties":{
+          "Bucket": {
+            "Ref": "emailbuckethw2808"
+          },
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Action": [
+                  "s3:PutObject",
+                  "s3:*"
+                ],
+                "Effect": "Allow",
+                "Principal": {
+                  "AWS": "arn:aws:iam::475917346255:root",
+                  "Service": "ses.amazonaws.com"
+                },
+                "Resource": [
+                  "arn:aws:s3:::emailbuckethw2808/*",
+                  "arn:aws:s3:::emailbuckethw2808"
+                ]
+              }
+  
+            ]
+          }
+        }
+      },
+      "defaultruleset":{
+        "Type" : "AWS::SES::ReceiptRuleSet",
+        "Properties" : {
+            "RuleSetName" : "default-rule-set"
+        }
+      },
+      "sesRulecf": {
+        "Type" : "AWS::SES::ReceiptRule",
+        "Properties" : {
+          "Rule" : {
+            "Name": "ses-rule-cf",
+            "Enabled": true,
+            "ScanEnabled": true,
+            "Actions": [
+              {
+                "S3Action": {
+                  "BucketName": {
+                    "Ref": "emailbuckethw2808"
+                  }
+  
+                }
+              }
+            ]
+          },
+          "RuleSetName": "default-rule-set"
+        }
+      }
+    }
+  }
